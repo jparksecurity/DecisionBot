@@ -57,12 +57,15 @@ Remote teammates miss out on critical "hallway‑style" decisions made in live c
 ## 7   Solution Overview
 
 1. **Auto‑join** – Bot enters a voice channel automatically when the first non‑bot user joins.
-2. **Record** – Per‑speaker Opus → WAV via `discord.js + @discordjs/voice + prism‑media`.
+2. **Record** – Per‑speaker Opus → WAV via `discord.js + @discordjs/voice + prism‑media`. Files are saved to a directory for the meeting.
 3. **Meeting end** – Triggered only when channel empties (`allParticipants.size === 0`).
-4. **Transcribe** – Upload WAV files to ByteNite; poll every 10 s until Whisper transcripts ready.
-5. **Decision extraction** – Send transcripts to GMI Cloud; receive candidate decisions (text, speakerId).
+4. **Trigger Distributed Job** – Upload the entire meeting's audio directory to a ByteNite data source. Launch a single job using a template that defines a three-stage pipeline:
+    *   **a) Partitioner**: A custom `directory-partitioner` creates a task for each audio file in the directory.
+    *   **b) App**: The existing transcription app runs in parallel on each file, converting audio to a transcript.
+    *   **c) Assembler**: A custom `decision-extractor-assembler` gathers all transcripts, combines them, calls GMI Cloud for decision extraction, and returns the final list of candidates.
+5. **Get Job Result** – Poll the ByteNite job for completion and retrieves the final output from the assembler, which contains the decision candidates (`{text, speakerId}`).
 6. **Confirm** – DM allParticipants a list of candidates; ❌ within 60 s cancels a candidate.
-7. **Publish** – Post remaining decisions to **#decisions**; include date/time & participant list.  Canceled items generate a "Decision canceled" notice.
+7. **Publish** – Post remaining decisions to **#decisions**; include date/time & participant list. Canceled items generate a "Decision canceled" notice.
 8. **Cleanup** – Delete temp audio immediately after publish/abort.
 9. **Observability** – Emit OpenTelemetry spans via Langtrace (traceId `meeting:<guildId>:<startTs>`).
 
@@ -81,16 +84,24 @@ Decode per‑speaker Opus to 48 kHz 16‑bit WAV; save to `/tmp/meet/<meetingI
 Maintain `allParticipants` = every user who ever joined during session.
 
 **FR‑4 Meeting End**
-Session ends when `allParticipants.size === 0` (channel empty). Idle‑timeout logic removed.
+Session ends when `allParticipants.size === 0` (channel empty).
 
-**FR‑5 Transcription Upload**
-POST each WAV to ByteNite File‑Upload; store jobIds; poll every 10 s until all transcripts returned.
+**FR‑5 ByteNite Job Execution**
+- On meeting end, the bot uploads the directory of WAV files to a configured ByteNite data source (e.g., a cloud bucket).
+- The bot then launches a single job using a pre-defined ByteNite Job Template.
+- This job executes a three-stage pipeline:
+    1.  A **Partitioner** splits the work by creating a task for each audio file.
+    2.  The transcription **App** processes each file in parallel.
+    3.  An **Assembler** collects all transcripts, calls the GMI Cloud service for decision extraction, and produces the final result.
+- The bot polls the ByteNite job for completion and retrieves the final output. The 10s polling interval from the previous design is a reasonable default.
 
 **FR‑6 Decision Extraction**
-Send combined transcripts to GMI `decision-extractor-v1`; receive array `{text, speakerId}`.
+- This step is now fully delegated to the **ByteNite Assembler**.
+- The assembler is responsible for sending the combined transcript text to the GMI `decision-extractor-v1` service.
+- The final output of the ByteNite job is the array of decision candidates (`{text, speakerId}`). The bot simply parses this result.
 
 **FR‑7 Zero‑Decision Case**
-If GMI returns **no** decision candidates, DM every user in `allParticipants` with:
+If the final result from the ByteNite job is an empty list of candidates, DM every user in `allParticipants` with:
 
 > "No decisions were automatically detected for this meeting. React with ❌ within 60 s if a decision was actually made and I missed it."
 > • If any ❌ arrives → flag the session for manual follow‑up by posting a clarification request in #decisions.
@@ -225,19 +236,10 @@ Unit tests are split into three layers: **TypeScript bot modules (Jest)**, **Pyt
 | **MeetingManager**      | MM‑1    | `detectChannelEmpty()` fires once when channel empties                       | Pass             |
 |                         | MM‑2    | `enforceTimeSLA()` – processing completes within 2 min for ≤1h meeting       | Pass             |
 |                         | MM‑3    | `handleProcessingMemoryLimit()` – large meetings → memory cleanup            | Pass             |
-| **ByteNiteAdapter**     | BN‑1    | `enqueueUpload()` sends POST → stores jobId                                  | jobId saved      |
-|                         | BN‑2    | `pollUntilDone()` – 3 "processing" polls then "done" → resolves              | transcript array |
+| **ByteNiteAdapter**     | BN‑1    | `triggerJob()` sends POST with data source → stores single jobId             | jobId saved      |
+|                         | BN‑2    | `pollForFinalResult()` – polls single jobId until "done" → resolves          | decision array   |
 |                         | BN‑3    | `pollTimeout()` – 30 polls all "processing" → throws TimeoutError            | Error caught     |
-|                         | BN‑4    | `uploadRetry()` – first 2 POST 500, 3rd 200 → succeeds                       | jobId saved      |
-|                         | BN‑5    | `validateFileFormat()` – accepts WAV/MP3/M4A/FLAC/OGG, rejects others        | Pass/Error       |
-|                         | BN‑6    | `handleLargeFiles()` – >50MB files → chunked upload or error                 | Pass/Error       |
-| **TranscriberService**  | TS‑1    | `mergeTranscripts()` returns combined array sorted by start                  | Pass             |
-|                         | TS‑2    | `handleOverlappingSpeech()` – concurrent speakers → merged timestamps        | Pass             |
-| **DecisionExtractor**   | DE‑1    | `callGMI()` returns two decisions                                            | array length 2   |
-|                         | DE‑2    | `emptyResponse()` sets `noDecision==true`                                    | flag true        |
-|                         | DE‑3    | `regexFallback()` – GMI fails → local regex finds decisions                  | decisions found  |
-|                         | DE‑4    | `deduplicateDecisions()` – similar decisions merged                          | unique decisions |
-|                         | DE‑5    | `filterGenericPhrases()` – excludes "we should do something"                 | filtered out     |
+|                         | BN‑4    | `jobLaunchRetry()` – first 2 POST 500, 3rd 200 → succeeds                    | jobId saved      |
 | **ConfirmationService** | CS‑1    | `dmAllParticipants()` sends one DM per user                                  | msgIds array     |
 |                         | CS‑2    | `cancelOnReaction()` within 60 s → status `canceled`                         | Pass             |
 |                         | CS‑3    | `lateReactionIgnored()` after 60 s → status `posted`                         | Pass             |
@@ -251,50 +253,51 @@ Unit tests are split into three layers: **TypeScript bot modules (Jest)**, **Pyt
 |                         | CLN‑2   | `immediateCleanup()` – files deleted within 5s of publish                    | Pass             |
 |                         | CLN‑3   | `cleanupOnError()` – partial data deleted on session abort                   | dir missing      |
 |                         | CLN‑4   | `cleanupMemoryBuffers()` – in‑memory audio streams cleared                   | memory freed     |
-| **Observability**       | OBS‑1   | `langtraceSpans()` captures spans `join,upload,gmi,dm,publish,cleanup`       | trace length ≥6  |
+| **Observability**       | OBS‑1   | `langtraceSpans()` captures `join,triggerJob,pollJob,dm,publish,cleanup`     | trace length ≥6  |
 |                         | OBS‑2   | `meetingTraceId()` – format `meeting:<guildId>:<startTs>`                    | correct format   |
 |                         | OBS‑3   | `spanAttributes()` – includes meeting_id, guild_id, user_id                  | attributes set   |
 |                         | OBS‑4   | `errorRecording()` – exceptions recorded with SpanStatusCode.ERROR           | error span       |
-|                         | OBS‑5   | `traceContextPropagation()` – context flows across service boundaries        | Pass             |
+|                         | OBS‑5   | `traceContextPropagation()` – context flows into ByteNite job call           | Pass             |
 |                         | OBS‑6   | `customSpanEvents()` – records key decision points as events                 | events captured  |
 
 ### 11.2  Python ByteNite Service Tests (pytest)
 
-| Module / Function        | Test ID | Description                                                    | Expected Outcome                      |
-| ------------------------ | ------- | -------------------------------------------------------------- | ------------------------------------- |
-| **Core Functions**       | PY‑C1   | `install_requirements()` – installs whisper and requests      | imports succeed after call           |
-|                          | PY‑C2   | `transcribe_audio()` – valid WAV file → returns transcript    | dict with text, segments, language    |
-|                          | PY‑C3   | `process_file()` – valid audio → transcription result         | result dict returned                  |
-|                          | PY‑C4   | `process_file()` with output path → saves JSON file           | JSON file created and valid           |
-| **Input Validation**     | PY‑I1   | `process_file()` – missing input file → FileNotFoundError     | Exception raised                      |
-|                          | PY‑I2   | `main()` – no args or env vars → shows usage message          | usage printed, returns 1              |
-|                          | PY‑I3   | `main()` – valid INPUT_FILE env var → processes file          | success, returns 0                    |
-|                          | PY‑I4   | `main()` – command line args → processes file                 | success, returns 0                    |
-| **Error Handling**       | PY‑E1   | `transcribe_audio()` – corrupted audio → graceful error       | Exception with clear message          |
-|                          | PY‑E2   | `process_file()` – unreadable output path → handles error     | IOError handled gracefully            |
-|                          | PY‑E3   | `main()` – general exception → returns 1                      | error logged, non-zero exit           |
-| **File Operations**      | PY‑F1   | Output JSON contains expected keys (text, segments, language)  | all required keys present             |
-|                          | PY‑F2   | Handles various audio formats (WAV, MP3, M4A, etc.)          | transcription works for all formats   |
-|                          | PY‑F3   | Large audio files processed without memory issues             | successful processing                 |
-| **Environment**          | PY‑ENV1 | Script works without pre-installed dependencies               | auto-installs and continues           |
-|                          | PY‑ENV2 | Environment variables take precedence over command args       | correct file processed                |
-|                          | PY‑ENV3 | Script executable directly from command line                  | runs without python prefix            |
+The Python tests are now broken down by component: Partitioner, App, and Assembler.
+
+| Component / Module       | Test ID | Description                                                              | Expected Outcome                         |
+| ------------------------ | ------- | ------------------------------------------------------------------------ | ---------------------------------------- |
+| **Partitioner**          | PART‑1  | Given input dir with 3 files, creates 3 chunks                           | 3 chunk files created                    |
+|                          | PART‑2  | Given empty input dir, creates 0 chunks                                  | 0 chunk files created                    |
+|                          | PART‑3  | Handles non-existent input dir gracefully                                | Error logged, non-zero exit              |
+| **App (Transcription)**  | APP‑1   | `transcribe_audio()` – valid WAV file → returns transcript               | dict with text, segments, language       |
+|                          | APP‑2   | `process_file()` – valid audio → transcription result                    | result dict returned                     |
+|                          | APP‑3   | `process_file()` – missing input file → FileNotFoundError                | Exception raised                         |
+|                          | APP‑4   | `main()` – valid INPUT_FILE env var → processes file                     | success, returns 0                       |
+|                          | APP‑5   | `transcribe_audio()` – corrupted audio → graceful error                  | Exception with clear message             |
+| **Assembler (Decision)** | ASM‑1   | `merge_transcripts()` – combines text from multiple input JSONs          | single concatenated string               |
+|                          | ASM‑2   | `call_gmi()` – mock GMI call with merged text                            | GMI service called with correct payload  |
+|                          | ASM‑3   | `regex_fallback()` – if GMI fails, local regex finds decisions           | decisions found in output                |
+|                          | ASM‑4   | `main()` – processes multiple input files into a final decision JSON     | success, returns 0                       |
+|                          | ASM‑5   | Handles zero input transcript files gracefully                           | empty decision array in output           |
+|                          | ASM‑6   | `main()` – GMI call fails → returns 1, logs error                        | error logged, non-zero exit              |
+|                          | ASM‑7   | Output JSON for decisions matches expected format                        | valid JSON with required keys            |
+|                          | ASM‑8   | `install_requirements()` – installs `requests`                           | imports succeed                          |
 
 ### 11.3  Integration Tests (Jest + subprocess for ByteNite script)
 
-| Scenario                    | Test ID | Description                                               | Expected Outcome                                 |
-| --------------------------- | ------- | --------------------------------------------------------- | ------------------------------------------------ |
-| **End‑to‑End Flow**         | INT‑1   | Mock Discord voice, ByteNite transcripts, GMI decisions  | DM sent, decision posted                         |
-|                             | INT‑2   | ByteNite 500s → regex fallback → decision flow           | decision posted, Langtrace span `fallback==true` |
-|                             | INT‑3   | Complete meeting lifecycle with real services             | all components integrated                        |
-| **Performance Tests**       | INT‑4   | 1‑hour meeting processed within 2‑minute SLA             | completion time <2min                            |
-|                             | INT‑5   | Multiple concurrent meetings → no resource conflicts      | all complete successfully                        |
-| **Error Recovery**          | INT‑6   | Network failures → retry with exponential backoff        | eventual success                                 |
-|                             | INT‑7   | Partial failures → graceful degradation                   | partial results posted                           |
-| **Security & Privacy**      | INT‑8   | Audio files deleted after processing                      | no temp files remain                             |
-|                             | INT‑9   | No sensitive data in logs                                 | logs sanitized                                   |
-| **Observability**           | INT‑10  | Distributed tracing across all services                   | complete trace spans                             |
-|                             | INT‑11  | Error spans captured with correct attributes              | error telemetry complete                         |
+| Scenario                    | Test ID | Description                                                               | Expected Outcome                                 |
+| --------------------------- | ------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
+| **End‑to‑End Flow**         | INT‑1   | Mock Discord voice, mock single ByteNite job returns GMI decisions       | DM sent, decision posted                         |
+|                             | INT‑2   | Mock ByteNite job returns a result where GMI fallback was used           | decision posted, Langtrace span `fallback==true` |
+|                             | INT‑3   | Complete meeting lifecycle with real services (if possible in CI)         | all components integrated                        |
+| **Performance Tests**       | INT‑4   | 1‑hour meeting processed within 2‑minute SLA (end-to-end)                | completion time <2min                            |
+|                             | INT‑5   | Multiple concurrent meetings → no resource conflicts                      | all complete successfully                        |
+| **Error Recovery**          | INT‑6   | Network failures to ByteNite API → retry with exponential backoff        | eventual success                                 |
+|                             | INT‑7   | ByteNite job itself fails → graceful degradation, error logged           | error posted to #decisionbot-logs                |
+| **Security & Privacy**      | INT‑8   | Audio files deleted after processing                                      | no temp files remain                             |
+|                             | INT‑9   | No sensitive data in logs                                                 | logs sanitized                                   |
+| **Observability**           | INT‑10  | Distributed tracing context propagates from Bot to ByteNite Job          | complete trace spans visible in Langtrace        |
+|                             | INT‑11  | Error spans captured with correct attributes for failed ByteNite jobs    | error telemetry complete                         |
 
 ### 11.4  Performance & Load Tests
 
