@@ -1,7 +1,7 @@
 {
-  "id": "transcription-service-template",
-  "description": "A template for audio transcription using Whisper",
+  "id": "decision-bot-pipeline-template",
+  "description": "A full pipeline for transcribing audio and extracting decisions from meeting recordings",
+  "partitioner": "directory-partitioner",
   "app": "transcription-service",
-  "partitioner": "passthrough",
-  "assembler": "passthrough"
+  "assembler": "decision-extractor-assembler"
 } 
