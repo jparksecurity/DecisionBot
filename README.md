@@ -1,6 +1,18 @@
 # DecisionBot
 
+*Built for [AI Hackathon: Hack The Stack](https://lu.ma/7jq48kc9?tk=GHVN8j) - June 5-6, 2024*
+
 Ambient decision capture for Discord voice meetings. Automatically records, transcribes, and extracts decisions from voice conversations with participant confirmation.
+
+## 🏆 Hackathon Project
+
+This project was developed during the 24-hour AI Hackathon: Hack The Stack hosted by Kayode Adegbite & Taryn Cunningham at GMI Cloud in Mountain View, California. Special thanks to the event sponsors:
+
+- **[Langtrace.ai](https://langtrace.ai)** - Observability and evaluation platform (used in this project)
+- **[GMICloud.ai](https://gmicloud.ai)** - GPU cloud infrastructure for AI workloads (used in this project)
+- **[KrosAI.com](https://krosai.com)** - AI voice and text agents
+- **[Trae.ai](https://trae.ai)** - AI-powered developer environment  
+- **[BetaUniversity.org](https://betauniversity.org)** - Pre-accelerator for diverse founders
 
 ## Features
 
