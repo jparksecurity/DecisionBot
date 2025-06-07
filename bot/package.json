@@ -22,7 +22,8 @@
     "@opentelemetry/sdk-node": "^0.45.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.45.1",
     "winston": "^3.11.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "form-data": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",
@@ -35,7 +36,9 @@
     "@typescript-eslint/eslint-plugin": "^6.13.1",
     "@typescript-eslint/parser": "^6.13.1",
     "nock": "^13.4.0",
-    "jest-mock-extended": "^3.0.5"
+    "jest-mock-extended": "^3.0.5",
+    "@jest/globals": "^29.7.0",
+    "@types/form-data": "^2.5.0"
   },
   "engines": {
     "node": ">=18.0.0"

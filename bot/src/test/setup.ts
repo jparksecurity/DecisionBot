@@ -48,9 +48,16 @@ jest.mock('node-fetch');
 
 // Mock file system operations where needed
 jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
   createWriteStream: jest.fn(),
   createReadStream: jest.fn(),
+  readdirSync: jest.fn(),
+  stat: jest.fn(),
+  promises: {
+    rm: jest.fn(),
+    stat: jest.fn(),
+  },
 }));
 
 // Setup fake timers by default

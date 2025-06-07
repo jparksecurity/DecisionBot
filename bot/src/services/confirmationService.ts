@@ -1,4 +1,4 @@
-import { Client, User, Message, MessageReaction, EmbedBuilder } from 'discord.js';
+import { Client, User, Message, MessageReaction, PartialMessageReaction, PartialUser, EmbedBuilder, TextChannel, MessageReactionEventDetails } from 'discord.js';
 import { DecisionCandidate, MeetingSession, DecisionStatus } from '../models/types';
 import { logger } from '../utils/logger';
 import { observabilityService } from './observability';
@@ -18,7 +18,7 @@ export class ConfirmationService {
     this.client.on('messageReactionAdd', this.handleReactionAdd.bind(this));
   }
 
-  private async handleReactionAdd(reaction: MessageReaction, user: User): Promise<void> {
+  private async handleReactionAdd(reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser): Promise<void> {
     if (user.bot) return;
     if (reaction.emoji.name !== '❌') return;
 
@@ -31,12 +31,15 @@ export class ConfirmationService {
       clearTimeout(timeout);
       this.activeConfirmations.delete(messageId);
       
-      logger.info(`Decision cancelled by user ${user.tag}`, { messageId });
+      logger.info(`Decision cancelled by user ${user.id}`, { messageId });
       
       // Update the message to show cancellation
       try {
+        if (reaction.message.partial) {
+          await reaction.message.fetch();
+        }
         await reaction.message.edit({
-          content: `~~${reaction.message.content}~~\n\n❌ **Cancelled by ${user.tag}**`
+          content: `~~${reaction.message.content}~~\n\n❌ **Cancelled by ${user.id}**`
         });
       } catch (error) {
         logger.error('Failed to update cancelled message', error);
@@ -198,7 +201,7 @@ export class ConfirmationService {
     try {
       const channel = await this.client.channels.fetch(config.discord.decisionsChannelId);
       
-      if (channel?.isTextBased()) {
+      if (channel && channel.isTextBased() && 'send' in channel) {
         const embed = new EmbedBuilder()
           .setTitle('⚠️ Confirmation Required')
           .setDescription(`<@${userId}> - Please review this detected decision:\n\n**"${decision.text}"**\n\nReact with ❌ within 60 seconds to cancel.`)

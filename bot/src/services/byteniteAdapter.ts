@@ -1,6 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 import * as fs from 'fs';
-import * as FormData from 'form-data';
+import FormData from 'form-data';
 import { config } from '../utils/config';
 import { logger } from '../utils/logger';
 import { observabilityService } from './observability';

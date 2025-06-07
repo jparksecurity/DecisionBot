@@ -7,7 +7,7 @@ import {
   AudioPlayerStatus,
   VoiceConnectionStatus
 } from '@discordjs/voice';
-import { OpusEncoder } from 'prism-media';
+import { opus } from 'prism-media';
 import * as fs from 'fs';
 import * as path from 'path';
 import { pipeline } from 'stream/promises';
@@ -48,7 +48,7 @@ export class RecorderService {
         this.recordings.set(userId, writeStream);
 
         // Convert Opus to 48kHz 16-bit WAV
-        const opusDecoder = new OpusEncoder({ 
+        const opusDecoder = new opus.Decoder({ 
           rate: 48000, 
           channels: 2, 
           frameSize: 960 

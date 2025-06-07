@@ -143,7 +143,7 @@ export class Publisher {
         try {
           const logsChannel = await this.client.channels.fetch(config.discord.logsChannelId);
           
-          if (logsChannel?.isTextBased()) {
+          if (logsChannel && logsChannel.isTextBased() && 'send' in logsChannel) {
             const embed = new EmbedBuilder()
               .setTitle('🚨 DecisionBot Error')
               .setDescription(`An error occurred while processing meeting ${sessionId}`)

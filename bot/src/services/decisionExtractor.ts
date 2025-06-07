@@ -2,7 +2,7 @@ import axios, { AxiosResponse } from 'axios';
 import { config } from '../utils/config';
 import { logger } from '../utils/logger';
 import { observabilityService } from './observability';
-import { TranscriptResult, DecisionCandidate, GMIDecisionResponse } from '../models/types';
+import { TranscriptResult, DecisionCandidate, GMIDecisionResponse, DecisionStatus } from '../models/types';
 
 export class DecisionExtractor {
   private baseUrl: string;
@@ -23,7 +23,7 @@ export class DecisionExtractor {
           return await this.callGMIAPI(transcripts);
         } catch (error) {
           logger.error('GMI Cloud API failed, falling back to regex', error);
-          return this.regexFallback(transcripts);
+          return await this.regexFallback(transcripts);
         }
       },
       { transcriptCount: transcripts.length }
@@ -64,7 +64,7 @@ export class DecisionExtractor {
               id: `decision-${Date.now()}-${index}`,
               text: decision.text,
               speakerId: decision.speakerId,
-              status: 'pending' as const,
+              status: DecisionStatus.PENDING,
               confirmationMessageIds: new Map(),
             }));
 
@@ -85,7 +85,7 @@ export class DecisionExtractor {
     );
   }
 
-  private regexFallback(transcripts: TranscriptResult[]): DecisionCandidate[] {
+  private async regexFallback(transcripts: TranscriptResult[]): Promise<DecisionCandidate[]> {
     return observabilityService.executeWithSpan(
       'decision_extractor.regex_fallback',
       () => {
@@ -120,7 +120,7 @@ export class DecisionExtractor {
               id: `fallback-decision-${Date.now()}-${decisionIndex++}`,
               text: decisionText,
               speakerId: speakerId || 'unknown',
-              status: 'pending',
+              status: DecisionStatus.PENDING,
               confirmationMessageIds: new Map(),
             });
           }

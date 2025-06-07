@@ -1,6 +1,7 @@
 import { 
   VoiceState, 
-  VoiceChannel, 
+  VoiceChannel,
+  VoiceBasedChannel, 
   GuildMember,
   Client 
 } from 'discord.js';
@@ -67,7 +68,7 @@ export class VoiceManager {
     );
   }
 
-  private async handleUserJoin(member: GuildMember, channel: VoiceChannel): Promise<void> {
+  private async handleUserJoin(member: GuildMember, channel: VoiceBasedChannel): Promise<void> {
     const channelId = channel.id;
     let session = this.activeSessions.get(channelId);
 
@@ -95,7 +96,7 @@ export class VoiceManager {
     });
   }
 
-  private async handleUserLeave(member: GuildMember, channel: VoiceChannel): Promise<void> {
+  private async handleUserLeave(member: GuildMember, channel: VoiceBasedChannel): Promise<void> {
     const session = this.activeSessions.get(channel.id);
     if (!session) return;
 
@@ -116,7 +117,7 @@ export class VoiceManager {
     }
   }
 
-  private async createMeetingSession(channel: VoiceChannel): Promise<MeetingSession> {
+  private async createMeetingSession(channel: VoiceBasedChannel): Promise<MeetingSession> {
     const sessionId = `${channel.guildId}-${Date.now()}`;
     const session: MeetingSession = {
       id: sessionId,
@@ -140,14 +141,14 @@ export class VoiceManager {
     return session;
   }
 
-  private async joinChannel(channel: VoiceChannel, session: MeetingSession): Promise<void> {
+  private async joinChannel(channel: VoiceBasedChannel, session: MeetingSession): Promise<void> {
     return observabilityService.executeWithSpan(
       'voice_manager.join_channel',
       async () => {
         const connection = joinVoiceChannel({
           channelId: channel.id,
           guildId: channel.guildId,
-          adapterCreator: channel.guild.voiceAdapterCreator,
+          adapterCreator: channel.guild.voiceAdapterCreator as any,
         });
 
         connection.on(VoiceConnectionStatus.Ready, () => {

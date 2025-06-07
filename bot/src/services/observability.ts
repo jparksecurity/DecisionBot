@@ -31,7 +31,7 @@ class ObservabilityService {
 
   async executeWithSpan<T>(
     spanName: string,
-    operation: () => Promise<T>,
+    operation: () => Promise<T> | T,
     attributes: Record<string, string | number | boolean> = {}
   ): Promise<T> {
     return this.tracer.startActiveSpan(spanName, { kind: SpanKind.INTERNAL }, async (span) => {
