@@ -1,1 +1,0 @@
-# ByteNite Transcription Service

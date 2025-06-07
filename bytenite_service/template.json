@@ -1,0 +1,7 @@
+{
+  "id": "transcription-service-template",
+  "description": "A template for audio transcription using Whisper",
+  "app": "transcription-service",
+  "partitioner": "passthrough",
+  "assembler": "passthrough"
+} 

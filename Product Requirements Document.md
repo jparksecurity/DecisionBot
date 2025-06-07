@@ -258,27 +258,29 @@ Unit tests are split into three layers: **TypeScript bot modules (Jest)**, **Pyt
 |                         | OBS‑5   | `traceContextPropagation()` – context flows across service boundaries        | Pass             |
 |                         | OBS‑6   | `customSpanEvents()` – records key decision points as events                 | events captured  |
 
-### 11.2  Python ByteNite Service Tests (pytest + pytest‑asyncio)
+### 11.2  Python ByteNite Service Tests (pytest)
 
 | Module / Function        | Test ID | Description                                                    | Expected Outcome                      |
 | ------------------------ | ------- | -------------------------------------------------------------- | ------------------------------------- |
-| **File Upload**          | PY‑U1   | Mock POST 201 → returns jobId                                  | jobId string                          |
-|                          | PY‑U2   | `validateFileExtensions()` – accepts .wav/.mp3/.m4a/.flac/.ogg | Pass                                  |
-|                          | PY‑U3   | `rejectInvalidFormat()` – .txt/.exe files → 400 error          | HTTPException                         |
-|                          | PY‑U4   | `handleLargeFiles()` – >100MB files → appropriate response     | Pass/Error                            |
-| **Job Processing**       | PY‑P1   | 2× `processing`, 1× `done` → returns transcripts               | list len ≥1                           |
-|                          | PY‑P2   | 30× `processing` → raises TimeoutError                         | Exception                             |
-|                          | PY‑P3   | `jobStatusTransitions()` – QUEUED→PROCESSING→COMPLETED          | status progression                    |
-|                          | PY‑P4   | `jobNotFound()` – invalid jobId → 404                          | HTTPException                         |
-| **Whisper Integration**  | PY‑W1   | `whisperModelLoading()` – model initializes successfully       | model loaded                          |
-|                          | PY‑W2   | `transcribeAudio()` – WAV file → text output                   | transcript string                     |
-|                          | PY‑W3   | `handleWhisperFailure()` – corrupted audio → error             | job status FAILED                     |
-| **API Routes**           | PY‑R1   | `/transcribe` endpoint with dummy WAV → job created            | HTTP 200 & jobId                     |
-|                          | PY‑R2   | `/job/{id}/status` → returns job status and transcript         | HTTP 200 & status                    |
-|                          | PY‑R3   | `/health` endpoint → service health check                       | HTTP 200 & healthy                   |
-|                          | PY‑R4   | `/job/{id}` DELETE → job cleanup                               | HTTP 200 & deleted                   |
+| **Core Functions**       | PY‑C1   | `install_requirements()` – installs whisper and requests      | imports succeed after call           |
+|                          | PY‑C2   | `transcribe_audio()` – valid WAV file → returns transcript    | dict with text, segments, language    |
+|                          | PY‑C3   | `process_file()` – valid audio → transcription result         | result dict returned                  |
+|                          | PY‑C4   | `process_file()` with output path → saves JSON file           | JSON file created and valid           |
+| **Input Validation**     | PY‑I1   | `process_file()` – missing input file → FileNotFoundError     | Exception raised                      |
+|                          | PY‑I2   | `main()` – no args or env vars → shows usage message          | usage printed, returns 1              |
+|                          | PY‑I3   | `main()` – valid INPUT_FILE env var → processes file          | success, returns 0                    |
+|                          | PY‑I4   | `main()` – command line args → processes file                 | success, returns 0                    |
+| **Error Handling**       | PY‑E1   | `transcribe_audio()` – corrupted audio → graceful error       | Exception with clear message          |
+|                          | PY‑E2   | `process_file()` – unreadable output path → handles error     | IOError handled gracefully            |
+|                          | PY‑E3   | `main()` – general exception → returns 1                      | error logged, non-zero exit           |
+| **File Operations**      | PY‑F1   | Output JSON contains expected keys (text, segments, language)  | all required keys present             |
+|                          | PY‑F2   | Handles various audio formats (WAV, MP3, M4A, etc.)          | transcription works for all formats   |
+|                          | PY‑F3   | Large audio files processed without memory issues             | successful processing                 |
+| **Environment**          | PY‑ENV1 | Script works without pre-installed dependencies               | auto-installs and continues           |
+|                          | PY‑ENV2 | Environment variables take precedence over command args       | correct file processed                |
+|                          | PY‑ENV3 | Script executable directly from command line                  | runs without python prefix            |
 
-### 11.3  Integration Tests (Jest + supertest + httpx)
+### 11.3  Integration Tests (Jest + subprocess for ByteNite script)
 
 | Scenario                    | Test ID | Description                                               | Expected Outcome                                 |
 | --------------------------- | ------- | --------------------------------------------------------- | ------------------------------------------------ |
@@ -310,8 +312,8 @@ Unit tests are split into three layers: **TypeScript bot modules (Jest)**, **Pyt
 * **Jest** with `jest.useFakeTimers()` for 60s windows and timeout simulation.
 * **nock** intercepts HTTP for ByteNite & GMI API calls.
 * **ts‑auto‑mock** or **jest‑mock‑extended** for Discord.js objects and voice connections.
-* **pytest‑asyncio** & **httpx.AsyncClient** for FastAPI app testing.
+* **pytest** with mocked file system operations and audio processing for ByteNite script testing.
+* **tempfile** and **unittest.mock** for testing file I/O operations safely.
 * **InMemorySpanExporter** validates Langtrace spans and OpenTelemetry traces.
 * **Docker Compose** for integration test environment with real services.
 * **Artillery** or **k6** for load testing scenarios.
-* **Supertest** for HTTP endpoint testing in Node.js integration tests.
