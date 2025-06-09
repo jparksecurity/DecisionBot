@@ -1,7 +1,0 @@
-{
-  "id": "decision-bot-pipeline-template",
-  "description": "A full pipeline for transcribing audio and extracting decisions from meeting recordings",
-  "partitioner": "directory-partitioner",
-  "app": "transcription-service",
-  "assembler": "decision-extractor-assembler"
-} 
