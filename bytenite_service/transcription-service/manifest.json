@@ -1,0 +1,14 @@
+{
+  "name": "transcription-service",
+  "version": "0.1",
+  "description": "Audio transcription service using OpenAI Whisper",
+  "platform": "docker",
+  "entrypoint": "main.py",
+  "platform_config": {
+    "container": "python:latest"
+  },
+  "device_requirements": {
+    "min_cpu": 2,
+    "min_memory": 4
+  }
+}

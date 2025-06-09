@@ -1,0 +1,15 @@
+{
+  "name": "decision-extractor-assembler",
+  "version": "0.1",
+  "type": "assembler",
+  "description": "An assembling engine that merges transcripts and extracts decisions using GMI Cloud",
+  "entrypoint": "main.py",
+  "platform": "docker",
+  "platform_config": {
+    "container": "python:latest"
+  },
+  "device_requirements": {
+    "min_cpu": 2,
+    "min_memory": 2
+  }
+}
