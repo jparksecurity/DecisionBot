@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+Transcription Service for ByteNite
+Processes audio files using OpenAI Whisper for speech-to-text conversion
+"""
+
 # === BYTENITE APP - MAIN SCRIPT ===
 
 # Documentation: https://docs.bytenite.com/create-with-bytenite/building-blocks/apps
@@ -40,12 +46,12 @@ except json.JSONDecodeError as e:
 # == Utility Functions ==
 
 def read_chunk():
-    """Reads the data chunk from the specified chunk path."""
+    """Reads the audio file path from the chunk."""
     chunk_path = os.path.join(task_dir, 'data.bin')
     try:
-        with open(chunk_path, 'rb') as file:
-            data = file.read()
-        return data
+        with open(chunk_path, 'r') as file:
+            audio_path = file.read().strip()
+        return audio_path
     except OSError as e:
         raise RuntimeError(f"Error reading chunk file '{chunk_path}': {e}")
 
@@ -54,7 +60,7 @@ def write_task_result(filename, data):
     output_path = os.path.join(task_results_dir, filename)
     try:
         with open(output_path, 'w') as outfile:
-            outfile.write(data)
+            json.dump(data, outfile, indent=2)
         logger.info(f"Output saved to {output_path}")
     except OSError as e:
         raise RuntimeError(f"Error writing output file '{output_path}': {e}")
@@ -71,8 +77,7 @@ if __name__ == '__main__':
     
     # Read and process the input data from chunk_path.
     # This is a single data chunk from your partitioner, or the full data source file if using a passthrough partitioner.
-
-
+    audio_file_path = read_chunk()
 
     # ------------------------
 
@@ -80,15 +85,29 @@ if __name__ == '__main__':
     
     # Access parameters from the app_params dict.
     # These are the job parameters submitted in the job request under params.app.
-
-
+    # (No special parameters needed for transcription)
 
     # ------------------------
 
     # 3. Developing the Core Functionality
     
     # Develop your app's core processing functionality here.
-
+    try:
+        import whisper
+    except ImportError:
+        os.system("pip install openai-whisper")
+        import whisper
+    
+    # Load Whisper model and transcribe
+    model = whisper.load_model("turbo")
+    result = model.transcribe(audio_file_path)
+    
+    # Prepare output data
+    transcript_data = {
+        "text": result["text"].strip(),
+        "language": result["language"],
+        "segments": result["segments"]
+    }
 
     # ------------------------
 
@@ -96,3 +115,5 @@ if __name__ == '__main__':
     
     # Save your output files to task_results_dir.
     # These files will be accessible by your assembler or sent to the job's data destination if using a passthrough assembler.
+    filename = os.path.basename(audio_file_path).split('.')[0]
+    write_task_result(f"{filename}.json", transcript_data)
