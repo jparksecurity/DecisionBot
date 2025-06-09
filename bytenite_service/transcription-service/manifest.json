@@ -1,0 +1,14 @@
+{
+  "Name": "transcription-service",
+  "Version": "0.1",
+  "Platform": "docker",
+  "platform_config": {
+    "container": "python:latest"
+  },
+  "Entrypoint": "main.py",
+  "device_requirements": {
+    "min_cpu": 2,
+    "min_memory": 2
+  },
+  "Description": "An app named transcription-service"
+}
