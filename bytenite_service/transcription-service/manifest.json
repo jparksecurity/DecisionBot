@@ -3,7 +3,7 @@
   "Version": "0.1",
   "Platform": "docker",
   "platform_config": {
-    "container": "horaeng/decisionbot"
+    "container": "bytenite/bytenite-transcriber:latest"
   },
   "Entrypoint": "main.py",
   "device_requirements": {
