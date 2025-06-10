@@ -18,6 +18,12 @@ try:
 except ImportError as e:
     raise ImportError(f"Required library is missing: {e}")
 
+try:
+    import whisper
+except ImportError:
+    os.system("pip install openai-whisper")
+    import whisper
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -46,12 +52,20 @@ except json.JSONDecodeError as e:
 # == Utility Functions ==
 
 def read_chunk():
-    """Reads the audio file path from the chunk."""
+    """Reads the audio file from the chunk."""
     chunk_path = os.path.join(task_dir, 'data.bin')
+    temp_mp3_path = os.path.join(task_dir, 'temp.mp3')
     try:
-        with open(chunk_path, 'r') as file:
-            audio_path = file.read().strip()
-        return audio_path
+        # Read binary data
+        with open(chunk_path, 'rb') as file:
+            print(f"Reading chunk file: {chunk_path}")
+            audio_data = file.read()
+        
+        # Write to temporary MP3 file since Whisper needs a file path
+        with open(temp_mp3_path, 'wb') as temp_file:
+            temp_file.write(audio_data)
+            
+        return temp_mp3_path
     except OSError as e:
         raise RuntimeError(f"Error reading chunk file '{chunk_path}': {e}")
 
@@ -77,7 +91,7 @@ if __name__ == '__main__':
     
     # Read and process the input data from chunk_path.
     # This is a single data chunk from your partitioner, or the full data source file if using a passthrough partitioner.
-    audio_file_path = read_chunk()
+    audio_file = read_chunk()
 
     # ------------------------
 
@@ -92,15 +106,11 @@ if __name__ == '__main__':
     # 3. Developing the Core Functionality
     
     # Develop your app's core processing functionality here.
-    try:
-        import whisper
-    except ImportError:
-        os.system("pip install openai-whisper")
-        import whisper
+
     
     # Load Whisper model and transcribe
     model = whisper.load_model("turbo")
-    result = model.transcribe(audio_file_path)
+    result = model.transcribe(audio_file)
     
     # Prepare output data
     transcript_data = {
@@ -115,5 +125,5 @@ if __name__ == '__main__':
     
     # Save your output files to task_results_dir.
     # These files will be accessible by your assembler or sent to the job's data destination if using a passthrough assembler.
-    filename = os.path.basename(audio_file_path).split('.')[0]
-    write_task_result(f"{filename}.json", transcript_data)
+    filename = "transcription_result.json"
+    write_task_result(filename, transcript_data)

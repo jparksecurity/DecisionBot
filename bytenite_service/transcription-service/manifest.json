@@ -3,12 +3,12 @@
   "Version": "0.1",
   "Platform": "docker",
   "platform_config": {
-    "container": "python:latest"
+    "container": "bytenite/whisper-transcriber:latest"
   },
   "Entrypoint": "main.py",
   "device_requirements": {
-    "min_cpu": 2,
-    "min_memory": 8
+    "min_cpu": 8,
+    "min_memory": 16
   },
   "Description": "An app that processes audio files using OpenAI Whisper for speech-to-text conversion"
 }
