@@ -3,7 +3,7 @@
   "Version": "0.1",
   "Platform": "docker",
   "platform_config": {
-    "container": "bytenite/whisper-transcriber:latest"
+    "container": "horaeng/decisionbot"
   },
   "Entrypoint": "main.py",
   "device_requirements": {
