@@ -1,5 +1,5 @@
 {
-  "Name": "transcription-service",
+  "Name": "transcription",
   "Version": "0.1",
   "Platform": "docker",
   "platform_config": {
@@ -8,7 +8,7 @@
   "Entrypoint": "main.py",
   "device_requirements": {
     "min_cpu": 2,
-    "min_memory": 8
+    "min_memory": 2
   },
-  "Description": "An app that processes audio files using OpenAI Whisper for speech-to-text conversion"
+  "Description": "An app named transcription"
 }
