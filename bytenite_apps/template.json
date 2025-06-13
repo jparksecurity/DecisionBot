@@ -1,0 +1,7 @@
+{
+  "id": "decisionbot-transcription-template",
+  "description": "A template for DecisionBot transcription workflow with fanout partitioning and fanin assembling",
+  "app": "transcription@0.1",
+  "partitioner": "fanout",
+  "assembler": "fanin"
+} 
