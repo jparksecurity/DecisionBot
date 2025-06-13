@@ -3,12 +3,12 @@
   "Version": "0.1",
   "Platform": "docker",
   "platform_config": {
-    "container": "python:latest"
+    "container": "onerahmet/openai-whisper-asr-webservice:latest"
   },
   "Entrypoint": "main.py",
   "device_requirements": {
-    "min_cpu": 2,
-    "min_memory": 2
+    "min_cpu": 8,
+    "min_memory": 8
   },
-  "Description": "An app named transcription"
+  "Description": "Whisper-based audio transcription app using whisper-asr-webservice base image"
 }

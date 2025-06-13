@@ -1,7 +1,0 @@
-{
-  "id": "transcription-template",
-  "description": "A template for transcription",
-  "app": "transcription@0.1",
-  "partitioner": "passthrough",
-  "assembler": "passthrough"
-}

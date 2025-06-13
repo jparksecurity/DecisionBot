@@ -9,6 +9,8 @@ try:
     import json
     import os
     import logging
+    import whisper
+    import tempfile
 except ImportError as e:
     raise ImportError(f"Required library is missing: {e}")
 
@@ -71,8 +73,9 @@ if __name__ == '__main__':
     
     # Read and process the input data from chunk_path.
     # This is a single data chunk from your partitioner, or the full data source file if using a passthrough partitioner.
-
-
+    logger.info("Reading audio chunk...")
+    audio_data = read_chunk()
+    logger.info(f"Read {len(audio_data)} bytes of audio data")
 
     # ------------------------
 
@@ -80,15 +83,34 @@ if __name__ == '__main__':
     
     # Access parameters from the app_params dict.
     # These are the job parameters submitted in the job request under params.app.
-
-
+    model_name = app_params.get('model', 'turbo')  # Default to turbo model
+    logger.info(f"Using Whisper model: {model_name} with auto-detect language and transcribe task")
 
     # ------------------------
 
     # 3. Developing the Core Functionality
     
     # Develop your app's core processing functionality here.
-
+    try:
+        # Create a temporary file for the audio data
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+            temp_audio.write(audio_data)
+            temp_audio_path = temp_audio.name
+        
+        logger.info("Loading Whisper model...")
+        model = whisper.load_model(model_name)
+        
+        logger.info("Starting transcription...")
+        result = model.transcribe(temp_audio_path)
+        
+        logger.info("Transcription completed successfully")
+        
+        # Clean up temporary file
+        os.unlink(temp_audio_path)
+        
+    except Exception as e:
+        logger.error(f"Error during transcription: {e}")
+        raise RuntimeError(f"Transcription failed: {e}")
 
     # ------------------------
 
@@ -96,3 +118,17 @@ if __name__ == '__main__':
     
     # Save your output files to task_results_dir.
     # These files will be accessible by your assembler or sent to the job's data destination if using a passthrough assembler.
+    
+    # Prepare the output data
+    output_data = {
+        "text": result["text"],
+        "language": result.get("language", "unknown"),
+        "segments": result.get("segments", []),
+        "model_used": model_name,
+    }
+    
+    # Save as JSON
+    output_json = json.dumps(output_data, indent=2, ensure_ascii=False)
+    write_task_result("transcription_result.json", output_json)
+    
+    logger.info("App task completed successfully")
