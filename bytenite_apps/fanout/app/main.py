@@ -10,6 +10,8 @@ try:
     import os
     import re
     import logging
+    import zipfile
+    import tempfile
 except ImportError as e:
     raise ImportError(f"Required library is missing: {e}")
 
@@ -96,9 +98,19 @@ if __name__ == "__main__":
 
     # 1. Reading Data Source
     # Read your data source files, available in the source_dir directory. You can use the read_source_files function to read the content of all files in the source directory.
-    logger.info(f"Reading audio files from source directory: {source_dir}")
+    logger.info(f"Reading files from source directory: {source_dir}")
     
-    # Get list of audio files in source directory
+    source_files = read_source_files()
+    
+    if not source_files:
+        logger.warning("No files found in source directory")
+        logger.info("Partitioner task completed - no files to process")
+        exit(0)
+    
+    logger.info(f"Found {len(source_files)} files in source directory")
+    
+    # Check if we have zip files that need to be extracted
+    zip_files = []
     audio_files = []
     supported_formats = {'.mp3', '.wav', '.m4a', '.flac', '.mp4', '.avi', '.mov', '.mkv', '.webm'}
     
@@ -107,25 +119,61 @@ if __name__ == "__main__":
             file_path = os.path.join(source_dir, filename)
             if os.path.isfile(file_path):
                 file_ext = os.path.splitext(filename)[1].lower()
-                if file_ext in supported_formats:
-                    audio_files.append((filename, file_path))
-                    logger.info(f"Found audio file: {filename}")
+                if file_ext == '.zip':
+                    zip_files.append((filename, file_path))
+                    logger.info(f"Found zip file: {filename}")
     except OSError as e:
         raise RuntimeError(f"Error accessing source directory '{source_dir}': {e}")
     
-    if not audio_files:
-        logger.warning("No audio files found in source directory")
-        logger.info("Partitioner task completed - no files to process")
-        exit(0)
-    
-    logger.info(f"Found {len(audio_files)} audio files to process")
+    logger.info(f"Found {len(zip_files)} zip files and {len(audio_files)} direct audio files")
 
     # ------------------------
 
     # 2. Performing Pre-Processing Operations
     # Perform any pre-processing operations on the data source files here, like filtering, cleaning, or transforming the data.
-    # For audio transcription, we'll pass files through as-is
-    logger.info("Pre-processing: No additional processing needed for audio files")
+    logger.info("Pre-processing: Extracting zip files if present...")
+    
+    # Extract zip files and add their contents to audio_files
+    for zip_filename, zip_path in zip_files:
+        try:
+            logger.info(f"Extracting zip file: {zip_filename}")
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                # Create a temporary directory for extraction
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    zip_ref.extractall(temp_dir)
+                    
+                    # Find audio files in the extracted contents
+                    for root, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            file_ext = os.path.splitext(file)[1].lower()
+                            if file_ext in supported_formats:
+                                extracted_file_path = os.path.join(root, file)
+                                
+                                # Read the extracted audio file and add to audio_files
+                                with open(extracted_file_path, 'rb') as audio_file:
+                                    audio_data = audio_file.read()
+                                    
+                                # Create a temporary file to store the audio data
+                                temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext)
+                                temp_audio_file.write(audio_data)
+                                temp_audio_file.close()
+                                
+                                audio_files.append((file, temp_audio_file.name))
+                                logger.info(f"Extracted audio file from zip: {file}")
+                    
+        except zipfile.BadZipFile:
+            logger.error(f"Invalid zip file: {zip_filename}")
+            continue
+        except Exception as e:
+            logger.error(f"Error extracting zip file {zip_filename}: {e}")
+            continue
+    
+    if not audio_files:
+        logger.warning("No audio files found after processing")
+        logger.info("Partitioner task completed - no audio files to process")
+        exit(0)
+    
+    logger.info(f"Total audio files to process: {len(audio_files)}")
 
     # ------------------------
 
