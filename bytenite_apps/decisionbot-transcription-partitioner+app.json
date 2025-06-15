@@ -1,0 +1,7 @@
+{
+  "id": "decisionbot-transcription-partitioner+app",
+  "description": "A template for decisionbot-transcription",
+  "app": "transcription",
+  "partitioner": "fanout",
+  "assembler": "passthrough"
+}
