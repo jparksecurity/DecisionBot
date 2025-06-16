@@ -45,11 +45,6 @@ try:
 except json.JSONDecodeError:
     raise ValueError("Environment variable 'ASSEMBLER_PARAMS' contains invalid JSON.")
 
-# Get OpenAI API key
-OPENAI_API_KEY = params["OPENAI_API_KEY"]
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY not found in ASSEMBLER_PARAMS or is empty")
-
 # === Utility Functions ===
 
 def read_result_files():
@@ -107,18 +102,19 @@ def merge_transcripts(result_files_content):
         logger.error(f"Error merging transcripts: {e}")
         raise RuntimeError(f"Failed to merge transcripts: {e}")
 
-def call_openai_api(messages, model="o4-mini"):
-    """Makes a direct REST API call to OpenAI Chat Completions endpoint."""
-    url = "https://api.openai.com/v1/chat/completions"
+def call_openai_api(messages, model="llama-4-scout"):
+    """Makes a direct REST API call to local llama-server (OpenAI-compatible endpoint)."""
+    url = "http://localhost:8000/v1/chat/completions"
     
     headers = {
-        'Authorization': f'Bearer {OPENAI_API_KEY}',
         'Content-Type': 'application/json'
     }
     
     data = {
         'model': model,
         'messages': messages,
+        'temperature': 0.6,
+        'max_tokens': 2048
     }
     
     try:
@@ -130,17 +126,17 @@ def call_openai_api(messages, model="o4-mini"):
         )
         
         # Make the request
-        with urllib.request.urlopen(req, timeout=60) as response:
+        with urllib.request.urlopen(req, timeout=120) as response:
             response_data = json.loads(response.read().decode('utf-8'))
             return response_data
             
     except urllib.error.HTTPError as e:
         error_body = e.read().decode('utf-8')
-        raise Exception(f"OpenAI API HTTP Error {e.code}: {error_body}")
+        raise Exception(f"Local LLM API HTTP Error {e.code}: {error_body}")
     except urllib.error.URLError as e:
-        raise Exception(f"OpenAI API URL Error: {e.reason}")
+        raise Exception(f"Local LLM API URL Error: {e.reason}")
     except Exception as e:
-        raise Exception(f"OpenAI API Error: {str(e)}")
+        raise Exception(f"Local LLM API Error: {str(e)}")
 
 def extract_decisions_with_openai(combined_text):
     """Uses OpenAI to extract decisions from the combined transcript."""
@@ -172,28 +168,28 @@ def extract_decisions_with_openai(combined_text):
             {"role": "user", "content": user_prompt}
         ]
         
-        logger.info("Calling OpenAI REST API for decision extraction...")
+        logger.info("Calling local LLM API for decision extraction...")
         response = call_openai_api(messages)
         
         decisions_text = response['choices'][0]['message']['content'].strip()
-        logger.info(f"OpenAI response: {decisions_text}")
+        logger.info(f"Local LLM response: {decisions_text}")
         
         # Try to parse the JSON response
         try:
             decisions = json.loads(decisions_text)
             if isinstance(decisions, list):
-                logger.info(f"Successfully extracted {len(decisions)} decisions from OpenAI")
+                logger.info(f"Successfully extracted {len(decisions)} decisions from local LLM")
                 return decisions
             else:
-                logger.warning("OpenAI response was not a list, returning empty decisions")
+                logger.warning("Local LLM response was not a list, returning empty decisions")
                 return []
         except json.JSONDecodeError:
-            logger.warning("Could not parse OpenAI response as JSON, returning empty decisions")
+            logger.warning("Could not parse local LLM response as JSON, returning empty decisions")
             return []
             
     except Exception as e:
-        logger.error(f"OpenAI decision extraction failed: {e}")
-        logger.info("Returning empty decisions due to OpenAI failure")
+        logger.error(f"Local LLM decision extraction failed: {e}")
+        logger.info("Returning empty decisions due to local LLM failure")
         return []
 
 
@@ -262,7 +258,7 @@ if __name__ == "__main__":
     # ------------------------
     # 3. Performing Post-Processing Operations
     # Perform any necessary post-processing operations on the combined results.
-    logger.info("Extracting decisions using OpenAI...")
+    logger.info("Extracting decisions using local LLM...")
     try:
         decisions = extract_decisions_with_openai(combined_text)
         
@@ -294,7 +290,7 @@ if __name__ == "__main__":
         "metadata": {
             "total_transcripts": len(result_files_content),
             "combined_text_length": len(combined_text),
-            "processing_method": "openai" if enhanced_decisions else "no_decisions",
+            "processing_method": "local_llm" if enhanced_decisions else "no_decisions",
             "status": "success" if enhanced_decisions else "no_decisions_found",
             "speaker_count": len(speaker_map)
         },

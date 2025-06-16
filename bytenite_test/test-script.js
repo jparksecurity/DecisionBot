@@ -78,9 +78,7 @@ async function createJob(accessToken, templateId, jobName) {
       },
       params: {
         partitioner: {},
-        assembler: {
-          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-        },
+        assembler: {},
         app: {},
       },
     }),
@@ -379,11 +377,11 @@ async function getJobResults(accessToken, jobId) {
  */
 async function fetchUrlContent(url) {
   const response = await fetch(url);
-  
+
   if (!response.ok) {
     throw new Error(`Failed to fetch URL: HTTP ${response.status}`);
   }
-  
+
   return await response.text();
 }
 
@@ -397,19 +395,19 @@ async function displayJobResults(resultsResponse, jobId, fetchLinks = true) {
   console.log("\n📊 Job Results:");
   console.log("=".repeat(60));
   console.log(`🆔 Job ID: ${jobId}`);
-  
+
   const downloadableFiles = [];
-  
+
   // Check if results is an array or object
   if (Array.isArray(resultsResponse)) {
     console.log(`📈 Total Results: ${resultsResponse.length}`);
-    
+
     resultsResponse.forEach((result, index) => {
       console.log(`\n📋 Result ${index + 1}:`);
-      if (typeof result === 'object' && result !== null) {
+      if (typeof result === "object" && result !== null) {
         // Pretty print object results
         Object.entries(result).forEach(([key, value]) => {
-          if (typeof value === 'object' && value !== null) {
+          if (typeof value === "object" && value !== null) {
             console.log(`  ${key}: ${JSON.stringify(value, null, 2)}`);
           } else {
             console.log(`  ${key}: ${value}`);
@@ -419,25 +417,29 @@ async function displayJobResults(resultsResponse, jobId, fetchLinks = true) {
         console.log(`  ${result}`);
       }
     });
-  } else if (typeof resultsResponse === 'object' && resultsResponse !== null) {
+  } else if (typeof resultsResponse === "object" && resultsResponse !== null) {
     // Handle object response
     Object.entries(resultsResponse).forEach(([key, value]) => {
       console.log(`\n📊 ${key}:`);
       if (Array.isArray(value)) {
         console.log(`  Items: ${value.length}`);
         value.forEach((item, index) => {
-          console.log(`  [${index}]: ${typeof item === 'object' ? JSON.stringify(item, null, 2) : item}`);
-          
+          console.log(
+            `  [${index}]: ${
+              typeof item === "object" ? JSON.stringify(item, null, 2) : item
+            }`
+          );
+
           // Check if this item has a downloadable link
-          if (typeof item === 'object' && item !== null && item.link) {
+          if (typeof item === "object" && item !== null && item.link) {
             downloadableFiles.push({
               name: item.name || `Item ${index}`,
               link: item.link,
-              index: index
+              index: index,
             });
           }
         });
-      } else if (typeof value === 'object' && value !== null) {
+      } else if (typeof value === "object" && value !== null) {
         console.log(`  ${JSON.stringify(value, null, 2)}`);
       } else {
         console.log(`  ${value}`);
@@ -447,20 +449,22 @@ async function displayJobResults(resultsResponse, jobId, fetchLinks = true) {
     // Handle primitive response
     console.log(`📄 Result: ${resultsResponse}`);
   }
-  
+
   console.log("=".repeat(60));
-  
+
   // Fetch and display content from downloadable files
   if (fetchLinks && downloadableFiles.length > 0) {
-    console.log(`\n📥 Found ${downloadableFiles.length} downloadable file(s). Fetching content...\n`);
-    
+    console.log(
+      `\n📥 Found ${downloadableFiles.length} downloadable file(s). Fetching content...\n`
+    );
+
     for (const file of downloadableFiles) {
       try {
         console.log(`🔗 Fetching: ${file.name}`);
         console.log("─".repeat(40));
-        
+
         const content = await fetchUrlContent(file.link);
-        
+
         // Try to parse as JSON for better formatting
         try {
           const jsonContent = JSON.parse(content);
@@ -471,10 +475,9 @@ async function displayJobResults(resultsResponse, jobId, fetchLinks = true) {
           console.log(`📄 Content of ${file.name} (Text):`);
           console.log(content);
         }
-        
+
         console.log("─".repeat(40));
         console.log("");
-        
       } catch (error) {
         console.error(`❌ Failed to fetch ${file.name}: ${error.message}`);
       }
@@ -512,16 +515,19 @@ async function pollJobStatus(
 
       if (jobState === "JOB_STATE_COMPLETE") {
         console.log("✅ Job completed successfully!");
-        
+
         // Fetch and display job results
         try {
           console.log("📊 Fetching job results...");
           const resultsResponse = await getJobResults(accessToken, jobId);
           await displayJobResults(resultsResponse, jobId);
         } catch (resultError) {
-          console.error("⚠️  Failed to fetch job results:", resultError.message);
+          console.error(
+            "⚠️  Failed to fetch job results:",
+            resultError.message
+          );
         }
-        
+
         return statusResponse;
       } else if (jobState === "JOB_STATE_FAILED") {
         console.log("❌ Job failed!");

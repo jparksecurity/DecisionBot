@@ -7,7 +7,6 @@ This directory contains testing tools and utilities for ByteNite job management,
 - Node.js (version 20.6.0 or higher, for `--env-file` support)
 - macOS with `say` command (only needed for generating new audio files)
 - ByteNite API key
-- OpenAI API key
 
 ## Environment Setup
 
@@ -19,7 +18,6 @@ This directory contains testing tools and utilities for ByteNite job management,
 2. Edit `.env` and set your API keys:
    ```bash
    BYTENITE_API_KEY=your-bytenite-api-key
-   OPENAI_API_KEY=your-openai-api-key
    ```
 
 ## Scripts Overview
@@ -54,7 +52,7 @@ Main test script that creates and runs ByteNite jobs for audio transcription and
 **Usage:**
 ```bash
 # Using environment variables directly
-BYTENITE_API_KEY=your-api-key OPENAI_API_KEY=your-openai-key node test-script.js
+BYTENITE_API_KEY=your-api-key node test-script.js
 
 # Using .env file (Node.js 20.6.0+)
 node --env-file=.env test-script.js
@@ -148,7 +146,6 @@ cat .env
 ### ByteNite API Issues
 - Verify your `BYTENITE_API_KEY` is valid and has appropriate permissions
 - Check the job logs using `get-job-logs.js` for detailed error information
-- Ensure your `OPENAI_API_KEY` is set correctly for the assembler step
 
 ## File Structure
 
