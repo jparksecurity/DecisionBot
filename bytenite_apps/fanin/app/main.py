@@ -5,44 +5,20 @@
 # == Imports and Environment Variables ==
 
 # Ensure all required external libraries are available in the Docker container image specified in manifest.json under "platform_config" > "container".
-import subprocess
-import sys
 import os
-
-# Install OpenAI SDK if not available
-def install_openai():
-    """Install OpenAI SDK using pip"""
-    try:
-        import openai
-        print("OpenAI SDK already available")
-    except ImportError:
-        print("Installing OpenAI SDK...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "openai"])
-            print("OpenAI SDK installed successfully")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to install OpenAI SDK: {e}")
-
-# Install OpenAI before importing
-install_openai()
 
 try:
     import json
     import logging
-    from openai import OpenAI
+    import urllib.request
+    import urllib.parse
+    import urllib.error
 except ImportError as e:
     raise ImportError(f"Required library is missing: {e}")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Initialize OpenAI client
-openai_client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
-if not os.getenv("OPENAI_API_KEY"):
-    raise ValueError("OPENAI_API_KEY environment variable is required")
 
 # Path to the folder where the task results from your app executions are stored.
 task_results_dir = os.getenv("TASK_RESULTS_DIR")
@@ -69,6 +45,10 @@ try:
 except json.JSONDecodeError:
     raise ValueError("Environment variable 'ASSEMBLER_PARAMS' contains invalid JSON.")
 
+# Get OpenAI API key
+OPENAI_API_KEY = params["OPENAI_API_KEY"]
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY not found in ASSEMBLER_PARAMS or is empty")
 
 # === Utility Functions ===
 
@@ -127,6 +107,41 @@ def merge_transcripts(result_files_content):
         logger.error(f"Error merging transcripts: {e}")
         raise RuntimeError(f"Failed to merge transcripts: {e}")
 
+def call_openai_api(messages, model="o4-mini"):
+    """Makes a direct REST API call to OpenAI Chat Completions endpoint."""
+    url = "https://api.openai.com/v1/chat/completions"
+    
+    headers = {
+        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+    
+    data = {
+        'model': model,
+        'messages': messages,
+    }
+    
+    try:
+        # Create the request
+        req = urllib.request.Request(
+            url, 
+            json.dumps(data).encode('utf-8'), 
+            headers
+        )
+        
+        # Make the request
+        with urllib.request.urlopen(req, timeout=60) as response:
+            response_data = json.loads(response.read().decode('utf-8'))
+            return response_data
+            
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        raise Exception(f"OpenAI API HTTP Error {e.code}: {error_body}")
+    except urllib.error.URLError as e:
+        raise Exception(f"OpenAI API URL Error: {e.reason}")
+    except Exception as e:
+        raise Exception(f"OpenAI API Error: {str(e)}")
+
 def extract_decisions_with_openai(combined_text):
     """Uses OpenAI to extract decisions from the combined transcript."""
     try:
@@ -152,18 +167,15 @@ def extract_decisions_with_openai(combined_text):
         
         user_prompt = f"Please analyze this meeting transcript and extract any decisions:\n\n{combined_text}"
         
-        logger.info("Calling OpenAI for decision extraction...")
-        response = openai_client.chat.completions.create(
-            model="o4-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.1,
-            max_tokens=2000
-        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
         
-        decisions_text = response.choices[0].message.content.strip()
+        logger.info("Calling OpenAI REST API for decision extraction...")
+        response = call_openai_api(messages)
+        
+        decisions_text = response['choices'][0]['message']['content'].strip()
         logger.info(f"OpenAI response: {decisions_text}")
         
         # Try to parse the JSON response

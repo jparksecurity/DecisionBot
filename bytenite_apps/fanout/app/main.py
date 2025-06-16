@@ -49,19 +49,26 @@ except json.JSONDecodeError:
 # === Utility Functions ===
 
 def read_source_files():
-    """Reads and returns the content of all files in the results directory as a list of strings."""
-    source_files = []
+    """Reads and returns the binary content of the zip file in the source directory."""
     try:
         for filename in os.listdir(source_dir):
             file_path = os.path.join(source_dir, filename)
-            if os.path.isfile(file_path):
-                with open(file_path, "r") as file:
-                    source_files.append(file.read())
-        return source_files
+            if os.path.isfile(file_path) and filename.lower().endswith('.zip'):
+                with open(file_path, "rb") as file:
+                    return file.read()
+        
+        # If no zip file found, check for any single file (could be renamed)
+        files = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir, f))]
+        if len(files) == 1:
+            file_path = os.path.join(source_dir, files[0])
+            with open(file_path, "rb") as file:
+                return file.read()
+        
+        raise RuntimeError("No zip file found in source directory")
     except OSError as e:
         raise RuntimeError(f"Error accessing source directory '{source_dir}': {e}")
     except Exception as e:
-        raise RuntimeError(f"Error reading files in '{source_dir}': {e}")
+        raise RuntimeError(f"Error reading zip file in '{source_dir}': {e}")
 
 def save_chunk(data):
     """Writes a chunk of data to the next available file based on the naming convention."""
@@ -94,100 +101,71 @@ def save_chunk(data):
 if __name__ == "__main__":
     logger.info("Partitioner task started")
 
-     # == Your Code ==
+    # == Your Code ==
 
     # 1. Reading Data Source
-    # Read your data source files, available in the source_dir directory. You can use the read_source_files function to read the content of all files in the source directory.
-    logger.info(f"Reading files from source directory: {source_dir}")
-    
-    source_files = read_source_files()
-    
-    if not source_files:
-        logger.warning("No files found in source directory")
-        logger.info("Partitioner task completed - no files to process")
-        exit(0)
-    
-    logger.info(f"Found {len(source_files)} files in source directory")
-    
-    # Check if we have zip files that need to be extracted
-    zip_files = []
-    audio_files = []
-    supported_formats = {'.mp3', '.wav', '.m4a', '.flac', '.mp4', '.avi', '.mov', '.mkv', '.webm'}
+    # Read the zip file binary content from the source directory
+    logger.info(f"Reading zip file from source directory: {source_dir}")
     
     try:
-        for filename in os.listdir(source_dir):
-            file_path = os.path.join(source_dir, filename)
-            if os.path.isfile(file_path):
-                file_ext = os.path.splitext(filename)[1].lower()
-                if file_ext == '.zip':
-                    zip_files.append((filename, file_path))
-                    logger.info(f"Found zip file: {filename}")
-    except OSError as e:
-        raise RuntimeError(f"Error accessing source directory '{source_dir}': {e}")
-    
-    logger.info(f"Found {len(zip_files)} zip files and {len(audio_files)} direct audio files")
+        zip_data = read_source_files()
+        logger.info(f"Successfully read zip file ({len(zip_data)} bytes)")
+    except RuntimeError as e:
+        logger.error(f"Failed to read zip file: {e}")
+        logger.info("Partitioner task completed - no zip file to process")
+        exit(1)
 
     # ------------------------
 
     # 2. Performing Pre-Processing Operations
-    # Perform any pre-processing operations on the data source files here, like filtering, cleaning, or transforming the data.
-    logger.info("Pre-processing: Extracting zip files if present...")
+    # Extract audio files from the zip content in memory
+    logger.info("Pre-processing: Extracting audio files from zip content...")
     
-    # Extract zip files and add their contents to audio_files
-    for zip_filename, zip_path in zip_files:
-        try:
-            logger.info(f"Extracting zip file: {zip_filename}")
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # Create a temporary directory for extraction
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    zip_ref.extractall(temp_dir)
-                    
-                    # Find audio files in the extracted contents
-                    for root, dirs, files in os.walk(temp_dir):
-                        for file in files:
-                            file_ext = os.path.splitext(file)[1].lower()
-                            if file_ext in supported_formats:
-                                extracted_file_path = os.path.join(root, file)
-                                
-                                # Read the extracted audio file and add to audio_files
-                                with open(extracted_file_path, 'rb') as audio_file:
-                                    audio_data = audio_file.read()
-                                    
-                                # Create a temporary file to store the audio data
-                                temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext)
-                                temp_audio_file.write(audio_data)
-                                temp_audio_file.close()
-                                
-                                audio_files.append((file, temp_audio_file.name))
-                                logger.info(f"Extracted audio file from zip: {file}")
-                    
-        except zipfile.BadZipFile:
-            logger.error(f"Invalid zip file: {zip_filename}")
-            continue
-        except Exception as e:
-            logger.error(f"Error extracting zip file {zip_filename}: {e}")
-            continue
+    audio_files = []
+    supported_formats = {'.mp3', '.wav', '.m4a', '.flac', '.mp4', '.avi', '.mov', '.mkv', '.webm'}
+    
+    try:
+        # Create a temporary file to work with the zip data
+        with tempfile.NamedTemporaryFile() as temp_zip_file:
+            temp_zip_file.write(zip_data)
+            temp_zip_file.flush()
+            
+            # Extract audio files from the zip
+            with zipfile.ZipFile(temp_zip_file.name, 'r') as zip_ref:
+                for file_info in zip_ref.infolist():
+                    if not file_info.is_dir():
+                        file_ext = os.path.splitext(file_info.filename)[1].lower()
+                        if file_ext in supported_formats:
+                            # Extract the audio file content
+                            audio_data = zip_ref.read(file_info.filename)
+                            audio_files.append((file_info.filename, audio_data))
+                            logger.info(f"Extracted audio file: {file_info.filename} ({len(audio_data)} bytes)")
+    
+    except zipfile.BadZipFile:
+        logger.error("Invalid zip file content")
+        logger.info("Partitioner task completed - invalid zip file")
+        exit(1)
+    except Exception as e:
+        logger.error(f"Error extracting zip content: {e}")
+        logger.info("Partitioner task completed - extraction failed")
+        exit(1)
     
     if not audio_files:
-        logger.warning("No audio files found after processing")
+        logger.warning("No audio files found in zip content")
         logger.info("Partitioner task completed - no audio files to process")
         exit(0)
     
-    logger.info(f"Total audio files to process: {len(audio_files)}")
+    logger.info(f"Total audio files extracted: {len(audio_files)}")
 
     # ------------------------
 
     # 3. Fanning Out Data
-    # Fan out the data into chunks by writing to the chunks_dir using the write_chunk function. Each chunk will be processed as a separate task by your application.
+    # Fan out the audio data into chunks
     logger.info("Creating chunks for each audio file...")
     
     processed_count = 0
-    for filename, file_path in audio_files:
+    for filename, audio_data in audio_files:
         try:
-            # Read the audio file as binary data
-            with open(file_path, 'rb') as audio_file:
-                audio_data = audio_file.read()
-            
             # Create a chunk for this audio file
             save_chunk(audio_data)
             processed_count += 1

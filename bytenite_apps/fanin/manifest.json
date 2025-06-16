@@ -9,7 +9,7 @@
     "container": "python:latest"
   },
   "device_requirements": {
-    "min_cpu": 2,
-    "min_memory": 2
+    "min_cpu": 16,
+    "min_memory": 32
   }
 }
