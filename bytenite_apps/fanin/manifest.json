@@ -3,13 +3,13 @@
   "version": "0.1",
   "type": "assembler",
   "description": "An engine named fanin",
-  "entrypoint": "run.sh",
+  "entrypoint": "main.py",
   "platform": "docker",
   "platform_config": {
-    "container": "horaeng/scout17b-assembler:latest"
+    "container": "ai/qwen3:30B-A3B-Q4_K_M"
   },
   "device_requirements": {
-    "min_cpu": 32,
-    "min_memory": 96
+    "min_cpu": 8,
+    "min_memory": 64
   }
 }

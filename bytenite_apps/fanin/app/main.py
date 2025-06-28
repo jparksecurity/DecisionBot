@@ -102,9 +102,9 @@ def merge_transcripts(result_files_content):
         logger.error(f"Error merging transcripts: {e}")
         raise RuntimeError(f"Failed to merge transcripts: {e}")
 
-def call_openai_api(messages, model="llama-4-scout"):
-    """Makes a direct REST API call to local llama-server (OpenAI-compatible endpoint)."""
-    url = "http://localhost:8000/v1/chat/completions"
+def call_openai_api(messages, model="ai/qwen3:30B-A3B-Q4_K_M"):
+    """Makes a direct REST API call to Docker Model Runner (OpenAI-compatible endpoint)."""
+    url = "http://localhost:12434/v1/chat/completions"
     
     headers = {
         'Content-Type': 'application/json'
@@ -117,26 +117,46 @@ def call_openai_api(messages, model="llama-4-scout"):
         'max_tokens': 2048
     }
     
-    try:
-        # Create the request
-        req = urllib.request.Request(
-            url, 
-            json.dumps(data).encode('utf-8'), 
-            headers
-        )
-        
-        # Make the request
-        with urllib.request.urlopen(req, timeout=120) as response:
-            response_data = json.loads(response.read().decode('utf-8'))
-            return response_data
+    # Retry logic for large model first-token latency
+    max_attempts = 3
+    backoff_delay = 3
+    
+    for attempt in range(max_attempts):
+        try:
+            # Create the request
+            req = urllib.request.Request(
+                url, 
+                json.dumps(data).encode('utf-8'), 
+                headers
+            )
             
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8')
-        raise Exception(f"Local LLM API HTTP Error {e.code}: {error_body}")
-    except urllib.error.URLError as e:
-        raise Exception(f"Local LLM API URL Error: {e.reason}")
-    except Exception as e:
-        raise Exception(f"Local LLM API Error: {str(e)}")
+            # Make the request with extended timeout for large models
+            with urllib.request.urlopen(req, timeout=300) as response:
+                response_data = json.loads(response.read().decode('utf-8'))
+                return response_data
+                
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8')
+            if attempt == max_attempts - 1:  # Last attempt
+                raise Exception(f"Docker Model Runner HTTP Error {e.code}: {error_body}")
+            logger.warning(f"HTTP error on attempt {attempt + 1}, retrying in {backoff_delay}s...")
+            
+        except urllib.error.URLError as e:
+            if attempt == max_attempts - 1:  # Last attempt
+                if "Connection refused" in str(e.reason):
+                    raise Exception(f"Docker Model Runner connection refused. Is Docker Model Runner running? Try 'docker model install-runner'. Error: {e.reason}")
+                else:
+                    raise Exception(f"Docker Model Runner URL Error: {e.reason}")
+            logger.warning(f"Connection error on attempt {attempt + 1}, retrying in {backoff_delay}s...")
+            
+        except Exception as e:
+            if attempt == max_attempts - 1:  # Last attempt
+                raise Exception(f"Docker Model Runner Error: {str(e)}")
+            logger.warning(f"Unexpected error on attempt {attempt + 1}, retrying in {backoff_delay}s...")
+        
+        # Wait before retry
+        import time
+        time.sleep(backoff_delay)
 
 def extract_decisions_with_openai(combined_text):
     """Uses OpenAI to extract decisions from the combined transcript."""
